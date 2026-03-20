@@ -146,46 +146,8 @@ meteo-avg/
 | 🟡 Medium | 2 providers OR σ > threshold |
 | 🔴 Low | Only 1 provider reported |
 
-## Security
 
-- Server binds to `127.0.0.1` only (not accessible from network)
-- API keys never transmitted to browser
-- Add `.env` to `.gitignore`
 
----
-
-## 🚀 Free Cloud Hosting
-
-### Option 1: Render.com (Recommended - Free 750 hrs/month)
-
-1. Push code to GitHub
-2. Go to [render.com](https://render.com) and sign up with GitHub
-3. Create **New Web Service**
-4. Connect your repo and configure:
-   - **Runtime**: Python 3
-   - **Build Command**: `pip install -r requirements.txt`
-   - **Start Command**: `uvicorn web.server:app --host 0.0.0.0 --port $PORT`
-   - **Plan**: Free
-
-Your app will be live at `https://your-app-name.onrender.com`
-
-### Option 2: Railway.app (Free $5 credit/month)
-
-1. Go to [railway.app](https://railway.app)
-2. Sign up with GitHub
-3. **New Project** → **Deploy from GitHub repo**
-4. Add environment variables if needed
-5. Auto-deploys on push!
-
-### Option 3: PythonAnywhere (Free tier)
-
-1. Go to [pythonanywhere.com](https://www.pythonanywhere.com)
-2. Create free account
-3. Upload files or clone from GitHub
-4. Create a **Web App** with manual config
-5. Set virtual environment and WSGI file
-
----
 
 ## License
 
