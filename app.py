@@ -6,10 +6,12 @@ A local Python app that queries all available free weather APIs for a user-speci
 city, normalizes their responses, averages overlapping fields, and displays results
 in a local web dashboard with confidence scores and provider breakdown.
 
-Usage:
+Usage (local):
     python app.py
 
-Then enter a city name when prompted.
+Usage (cloud/production):
+    Set DEFAULT_CITY environment variable and run:
+    uvicorn web.server:app --host 0.0.0.0 --port $PORT
 """
 import asyncio
 import os
@@ -53,7 +55,22 @@ def get_settings():
     return {
         "timeout": float(os.getenv("REQUEST_TIMEOUT_SECONDS", "10")),
         "port": int(os.getenv("PORT", "8000")),
+        "default_city": os.getenv("DEFAULT_CITY", "London"),
     }
+
+
+async def resolve_city(city_name: str) -> GeoResult:
+    """
+    Resolve a city name to coordinates.
+
+    Args:
+        city_name: Name of the city to resolve
+
+    Returns:
+        GeoResult with coordinates and display name
+    """
+    geocoder = Geocoder()
+    return await geocoder.geocode(city_name)
 
 
 def prompt_for_city() -> GeoResult:
@@ -160,6 +177,19 @@ def print_startup_info(city_result: GeoResult, available_providers: list):
     print("\n" + "-" * 60)
 
 
+def is_running_in_cloud() -> bool:
+    """Check if we're running in a cloud environment (no stdin)."""
+    # Check for common cloud environment indicators
+    return (
+        not sys.stdin.isatty() or
+        os.getenv('RENDER') is not None or
+        os.getenv('RAILWAY_ENVIRONMENT') is not None or
+        os.getenv('FLY_APP_NAME') is not None or
+        os.getenv('DYNO') is not None or  # Heroku
+        os.getenv('PYTHONANYWHERE_SITE') is not None
+    )
+
+
 def main():
     """Main entry point."""
     # Load environment and configure providers
@@ -168,12 +198,6 @@ def main():
     # Get settings
     settings = get_settings()
 
-    # Prompt for city
-    print("\n🌤️  MeteoAvg - Weather Data Aggregator")
-    print("-" * 40)
-
-    city_result = prompt_for_city()
-
     # Get available providers
     available_providers = get_available_providers()
 
@@ -181,6 +205,31 @@ def main():
         print("\nNo weather providers available!")
         print("Please check your .env file for API keys.")
         sys.exit(1)
+
+    # Determine if we're in cloud or local mode
+    if is_running_in_cloud():
+        # Cloud mode: use default city from environment
+        default_city = settings["default_city"]
+        print(f"🌤️ MeteoAvg starting with default city: {default_city}")
+
+        try:
+            city_result = asyncio.run(resolve_city(default_city))
+        except Exception as e:
+            print(f"Warning: Could not resolve default city '{default_city}': {e}")
+            print("The app will start, but you'll need to search for a city in the UI.")
+            # Set a placeholder - user can search in the UI
+            city_result = GeoResult(
+                lat=51.5074,
+                lon=-0.1278,
+                display_name="London, United Kingdom",
+                country="United Kingdom",
+                admin1="England"
+            )
+    else:
+        # Local mode: prompt for city
+        print("\n🌤️  MeteoAvg - Weather Data Aggregator")
+        print("-" * 40)
+        city_result = prompt_for_city()
 
     # Print startup info
     print_startup_info(city_result, available_providers)
@@ -193,21 +242,28 @@ def main():
         display_name=city_result.display_name
     )
 
-    # Find available port
-    port = find_available_port(settings["port"])
-    url = f"http://127.0.0.1:{port}"
-
-    print(f"\n  Starting server at: {url}")
-    print("  Press Ctrl+C to stop the server.\n")
-
-    # Open browser
-    open_browser(url)
+    # Determine host and port
+    if is_running_in_cloud():
+        # Cloud: bind to all interfaces and use PORT env var
+        port = int(os.getenv("PORT", "8000"))
+        host = "0.0.0.0"
+        print(f"\n  Starting server on port: {port}")
+        print("  Access the app via your cloud provider's URL.\n")
+    else:
+        # Local: find available port and bind to localhost only
+        port = find_available_port(settings["port"])
+        host = "127.0.0.1"
+        url = f"http://127.0.0.1:{port}"
+        print(f"\n  Starting server at: {url}")
+        print("  Press Ctrl+C to stop the server.\n")
+        # Open browser
+        open_browser(url)
 
     # Start server
     try:
         uvicorn.run(
             app,
-            host="127.0.0.1",
+            host=host,
             port=port,
             log_level="warning",
             access_log=False
